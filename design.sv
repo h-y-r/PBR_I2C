@@ -5,6 +5,7 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
   localparam LOW_PERIOD_SCL = 6000; //min - 4700ns
   localparam DATA_SETUP_TIME = 300; //jak dlugo SDA stabilne przed posedge SCL
   localparam DATA_HOLD_TIME = 5000; //jak dlugo SDA stabilne po negedge SCL
+  localparam MAX_BYTES = 32; //max liczba bajtow do burst write
 
   logic SDA_ctrl = 1;
   logic SCL_ctrl = 1;
@@ -94,6 +95,7 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
       for (i = 7; i >= 0; i--) begin
       	readBit(data_got[i]);
       end
+      //sendBit(1'b0); //ack
       ack_got = 0;
     end
   endtask
@@ -106,6 +108,7 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
       if(ack_got) begin
         sendData(data);
       end
+      sendStop();
     end
   endtask
   
@@ -117,9 +120,44 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
       if(ack_got) begin
         readData();
       end
+      sendBit(1'b1);
+      sendStop();
     end
   endtask
-        
+
+  task burstRead(input reg [6:0] addr, input int numBytes); 
+    begin
+      sendStart();
+      sendAddressRW(addr, 1'b1);
+      getACK();
+      if(ack_got) begin
+        for (i = numBytes; i > 0; i--) begin
+          readData();
+          if(i>1) begin
+            sendBit(1'b0);
+          end
+        end
+      end
+      sendBit(1'b1);
+      sendStop();
+    end
+  endtask
+
+  task burstWrite(input reg [6:0] addr, input int numBytes, input reg [MAX_BYTES-1:0][6:0] data);
+    begin
+      sendStart();
+      sendAddressRW(addr, 1'b0);
+      getACK();
+      if(ack_got) begin
+        for(i=numBytes-1; i >= 0; i--) begin         
+            sendData(data[i]);
+            getACK();
+        end
+      end
+      sendStop();
+    end
+  endtask
+
 endmodule
 
 
