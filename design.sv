@@ -6,21 +6,13 @@
 //   rand int setup_time;
 //   rand int rand_bit;
 
-//   constraint c_standard_mode {
+//   constraint i2c_time_const {
 //     // Min High: 4000ns, Min Low: 4700ns, Min Setup Time: 250ns 
 //     high_period inside {[4000:7000]}; 
 //     low_period  inside {[4700:7000]};
 //     setup_time  inside {[250:1000]};
 //	   rand_bit    inside {[0:7]};
 //   }
-  
-//   function void display();
-//     $display("--- I2C Timing ---");
-//     $display("High Period: %0d ns", high_period);
-//     $display("Low Period:  %0d ns", low_period);
-//     $display("Setup Time:  %0d ns", setup_time);
-//     $display("Random Stop Bit:  %0d ns", rand_bit);
-//   endfunction
 // endclass
 
 //wszystkie funkcje koncza tick przed negedge SCL
