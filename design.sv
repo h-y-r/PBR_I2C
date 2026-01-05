@@ -1,10 +1,35 @@
 `timescale 1ns/10ps
+
+// class I2C_Config;
+//   rand int high_period;
+//   rand int low_period;
+//   rand int setup_time;
+//   rand int rand_bit;
+
+//   constraint c_standard_mode {
+//     // Min High: 4000ns, Min Low: 4700ns, Min Setup Time: 250ns 
+//     high_period inside {[4000:7000]}; 
+//     low_period  inside {[4700:7000]};
+//     setup_time  inside {[250:1000]};
+//	   rand_bit    inside {[0:7]};
+//   }
+  
+//   function void display();
+//     $display("--- I2C Timing ---");
+//     $display("High Period: %0d ns", high_period);
+//     $display("Low Period:  %0d ns", low_period);
+//     $display("Setup Time:  %0d ns", setup_time);
+//     $display("Random Stop Bit:  %0d ns", rand_bit);
+//   endfunction
+// endclass
+
 //wszystkie funkcje koncza tick przed negedge SCL
 module driver_I2C(input logic clk, inout SDA, inout SCL);
-  localparam HIGH_PERIOD_SCL = 6000; //min - 4000ns
-  localparam LOW_PERIOD_SCL = 6000; //min - 4700ns
-  localparam DATA_SETUP_TIME = 300; //jak dlugo SDA stabilne przed posedge SCL
-  localparam DATA_HOLD_TIME = 5000; //jak dlugo SDA stabilne po negedge SCL
+  int HIGH_PERIOD_SCL = 6000; //min - 4000ns
+  int LOW_PERIOD_SCL = 6000; //min - 4700ns
+  int DATA_SETUP_TIME = 300; //jak dlugo SDA stabilne przed posedge SCL
+  int DATA_HOLD_TIME = 5000; //jak dlugo SDA stabilne po negedge SCL
+  int RAND_STOP_BIT = 7;
   localparam MAX_BYTES = 32; //max liczba bajtow do burst write
 
   logic SDA_ctrl = 1;
@@ -44,7 +69,7 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
   bit last_ack = 1'b0;     // 1 ack 0 nack
   // koniec dodanego
 
-
+  
   task sendStart();
     begin
       // dodane
@@ -82,10 +107,10 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
   
   task sendBit (input bit data);
     begin
-
       SCL_ctrl = 0;
       #DATA_SETUP_TIME SDA_ctrl = data;
       #(LOW_PERIOD_SCL - DATA_SETUP_TIME) SCL_ctrl = 1;
+      wait(SCL === 1'b1); //SCL stretch
       #HIGH_PERIOD_SCL;
     end
   endtask
@@ -143,6 +168,7 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
     begin
       SCL_ctrl = 0;
       #LOW_PERIOD_SCL SCL_ctrl = 1;
+      wait(SCL === 1'b1); //SCL stretch
       #HIGH_PERIOD_SCL;
     end
   endtask
@@ -155,6 +181,7 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
 
        SCL_ctrl = 0;
        #LOW_PERIOD_SCL SCL_ctrl = 1;
+       wait(SCL === 1'b1); //SCL stretch
        #(HIGH_PERIOD_SCL/2) begin
          ack_got  = ~SDA;     // sda 0 -> ack 1 ------ sda 1 -> nack 0
          last_ack = ack_got;  
@@ -209,6 +236,46 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
       sendAddressRW(addr, 1'b0);
 
       // dodane ack po adresie 
+      getACK(1'b1);
+      // koniec dodanego
+
+      if(ack_got) begin
+        sendData(data);
+
+        // (opcjonalnie) jeśli sprwadzamy ACK po danych
+        // dodane
+        getACK(1'b0);
+        // koniec dodanego
+      end
+
+      sendStop();
+    end
+  endtask
+  
+  task writeTransactionReg(input reg [6:0] addr, input reg [7:0] register, input reg [7:0] data); 
+    begin
+      // dodane
+      phase    = M_IDLE;
+      byte_idx = -1;
+      bit_idx  = BIT_ACK;
+      // koniec dodanego
+
+      sendStart();
+      sendAddressRW(addr, 1'b0);
+
+      // dodane ack po adresie 
+      getACK(1'b1);
+      // koniec dodanego
+
+      if(ack_got) begin
+        sendData(register);
+
+        // (opcjonalnie) jeśli sprwadzamy ACK po danych
+        // dodane
+        ack_got = 0;
+        // koniec dodanego
+      end
+      
       getACK(1'b1);
       // koniec dodanego
 
@@ -329,6 +396,33 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
       sendStop();
     end
   endtask
+  
+  task writeRandomStop(input reg [6:0] addr, input reg [7:0] data, int randbit); 
+    begin
+      // dodane
+      phase    = M_IDLE;
+      byte_idx = -1;
+      bit_idx  = BIT_ACK;
+      // koniec dodanego
+
+      sendStart();
+      sendAddressRW(addr, 1'b0);
+
+      // dodane ack po adresie 
+      getACK(1'b1);
+      // koniec dodanego
+
+      if(ack_got) begin
+        for (i = 7; i >= 7-randbit; i--) begin
+          sendBit(data[i]);
+        end
+        // (opcjonalnie) jeśli sprwadzamy ACK po danych
+        // dodane
+        // koniec dodanego
+      end          
+      sendStop();
+    end
+  endtask
 
 endmodule
 
@@ -362,7 +456,7 @@ parameter BITS_SEND=BYTES_SEND<<3;                      //Calculation of number 
 parameter BYTES_RECEIVE=2;                              //Number of bytes to be received (controller-->target)
 parameter BITS_RECEIVE=BYTES_RECEIVE<<3;                //Calculation of number of bits to be received
 parameter ADDR_TARGET=7'b0000111;                       //Target address
-parameter STRETCH = 1000;//1000 0 tez dziala            //Number of clock cycles for clock-stretching after each address\data byte 
+parameter STRETCH = 0;//1000 0 tez dziala            //Number of clock cycles for clock-stretching after each address\data byte 
 
 //Input Deceleration
 input logic rst;                                     //Active high logic
@@ -404,8 +498,10 @@ logic [BYTES_RECEIVE-1:0] count_bytes_received;         //Counts the number of r
 logic rw;                                               //The LSB of the address frame ('0' for TX and '1' for RX)
 logic ack;                                              //Acknoledgement bit
 
-//HDL code
-
+logic [7:0] reg_mem [0:3]; // 4 registers: 0x00, 0x01, 0x02, 0x03
+logic [7:0] reg_ptr;
+logic [7:0] temp_byte;  
+//HDL code  
 //Bus state detection logic (i.e. free/busy)
 always @(*)
   case (busy_state)
@@ -463,6 +559,8 @@ endcase
 always @(posedge clk or negedge rst)
   if (!rst)
     state<=IDLE;
+  else if (!busy && state != IDLE)
+    state <= IDLE;
   else
   state<=next_state;
 
@@ -479,6 +577,11 @@ always @(posedge clk or negedge rst)
 	 data_received<='0;
     SCL_tx<=1'b1;
     SDA_tx<=1'b1;
+    reg_mem[0] <= 8'hAA; // Default value for Reg 0
+    reg_mem[1] <= 8'hBB; // Default value for Reg 1
+    reg_mem[2] <= 8'hCC; // Default value for Reg 2
+    reg_mem[3] <= 8'hDD; // Default value for Reg 3
+    reg_ptr    <= 8'h00;
   end
 
   //Idle state
@@ -506,7 +609,7 @@ always @(posedge clk or negedge rst)
     count_high<='0;                               //Reset High period counter
 
   else if (state==BIT_CYCLE_HIGH_ADDR) begin
-    data_send_sampled<=data_send;                 //Data to be sent if the controller asks for data from the target
+    data_send_sampled <= reg_mem[reg_ptr[1:0]]; //Data to be sent if the controller asks for data from the target
     count_high<=count_high+$bits(count_low)'(1);
 
   if (count_high==THIGH_SAMPLE) begin
@@ -548,15 +651,34 @@ always @(posedge clk or negedge rst)
   count_high<='0;                                //Reset HIGH period counter
   end
 
-  else if (state==BIT_CYCLE_HIGH_DATA) begin
-    count_high<=count_high+$bits(count_low)'(1);
+else if (state==BIT_CYCLE_HIGH_DATA) begin
+    count_high <= count_high + $bits(count_low)'(1);
 
-  if ((count_high==THIGH_SAMPLE)&&(rw==1'b0)) begin
-    data_received<={data_received[BITS_RECEIVE-2:0],SDA_rx};
-    count_data<=count_data+$bits(count_data)'(1);
-  end
-  count_low<='0;                                 //Reset LOW period counter
-  end
+    if ((count_high==THIGH_SAMPLE) && (rw==1'b0)) begin
+        
+        // --- FIXED: Calculated the byte using the variable declared at top ---
+        temp_byte = {data_received[BITS_RECEIVE-2:0], SDA_rx}; 
+        
+        data_received <= temp_byte; // Update the output buffer
+
+        // Logic to distinguish Pointer vs Data
+        if (count_bytes_received == 0) begin
+            // 1st Byte received: This is the Register Address (Pointer)
+            reg_ptr <= temp_byte; 
+        end
+        else begin
+            // 2nd+ Byte received: Write data to the register at reg_ptr
+            reg_mem[reg_ptr[1:0]] <= temp_byte;
+            
+            // Optional: Auto-increment pointer if you want support for that
+            // reg_ptr <= reg_ptr + 1; 
+        end
+        // -----------------------------------------------------------
+
+        count_data <= count_data + $bits(count_data)'(1);
+    end
+    count_low <= '0; 
+end
 
   //Send or receive acknoledgement bit for the data frame
   else if (state==BIT_CYCLE_LOW_DATA_ACK) begin
