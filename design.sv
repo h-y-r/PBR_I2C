@@ -1,27 +1,37 @@
 `timescale 1ns/10ps
 
 // class I2C_Config;
-//   rand int high_period;
-//   rand int low_period;
-//   rand int setup_time;
-//   rand int rand_bit;
+//   rand real time high_period;
+//   rand real time low_period;
+//   rand real time setup_time;
+//   rand real time start_setup_time;
+//   rand real time start_hold_time;
+//   rand real time stop_setup_time;
+//   rand real time rand_bit;
 
-//   constraint i2c_time_const {
+//   constrareal time i2c_time_const {
 //     // Min High: 4000ns, Min Low: 4700ns, Min Setup Time: 250ns 
 //     high_period inside {[4000:7000]}; 
 //     low_period  inside {[4700:7000]};
 //     setup_time  inside {[250:1000]};
+//	   start_setup_time  inside {[4700:7000]};
+//     start_hold_time  inside {[4000:7000]};
+//	   stop_setup_time  inside {[4000:7000]};
 //	   rand_bit    inside {[0:7]};
 //   }
 // endclass
 
 //wszystkie funkcje koncza tick przed negedge SCL
 module driver_I2C(input logic clk, inout SDA, inout SCL);
-  int HIGH_PERIOD_SCL = 6000; //min - 4000ns
-  int LOW_PERIOD_SCL = 6000; //min - 4700ns
-  int DATA_SETUP_TIME = 300; //jak dlugo SDA stabilne przed posedge SCL
-  int DATA_HOLD_TIME = 5000; //jak dlugo SDA stabilne po negedge SCL
-  int RAND_STOP_BIT = 7;
+  real time HIGH_PERIOD_SCL = 6000; //min - 4000ns
+  real time LOW_PERIOD_SCL = 6000; //min - 4700ns
+  real time DATA_SETUP_TIME = 300; //jak dlugo SDA stabilne przed posedge SCL
+  real time DATA_HOLD_TIME = LOW_PERIOD_SCL - DATA_SETUP_TIME; //jak dlugo SDA stabilne po negedge SCL
+  real time RAND_STOP_BIT = 7;
+  real time START_SETUP_TIME = 4700 //min - 4700ns - repeated start
+  real time START_HOLD_TIME = 4000 //min - 4000ns
+  real time STOP_SETUP_TIME = 4000 //min - 4000ns
+  real time BUFF_TIME = 4700 //min - 4700ns - time buffer pomiedzy stop i start
   localparam MAX_BYTES = 32; //max liczba bajtow do burst write
 
   logic SDA_ctrl = 1;
@@ -29,9 +39,9 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
   assign SDA = SDA_ctrl ? 1'bz : 1'b0;
   assign SCL = SCL_ctrl ? 1'bz : 1'b0;
   
-  logic ack_got = 0;
-  reg [7:0] data_got;
-  int i;
+  bit ack_got = 0;
+  bit [7:0] data_got;
+  real time i;
 
   // dodane
   typedef enum logic [3:0] {
@@ -53,11 +63,11 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
   //   >=0  indeks bitu adresu/danych
   //   -1   slot bitu rw
   //   -2   slot ack/nack
-  localparam int BIT_RW  = -1;
-  localparam int BIT_ACK = -2;
+  localparam real time BIT_RW  = -1;
+  localparam real time BIT_ACK = -2;
 
-  int bit_idx  = BIT_ACK;  // poza danymi
-  int byte_idx = -1;       // poza burstem
+  real time bit_idx  = BIT_ACK;  // poza danymi
+  real time byte_idx = -1;       // poza burstem
   bit last_ack = 1'b0;     // 1 ack 0 nack
   // koniec dodanego
 
@@ -69,12 +79,12 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
       bit_idx  = BIT_ACK;
       byte_idx = -1;
       // koniec dodanego
-
-      SDA_ctrl = 1;
-	  SCL_ctrl = 1;
-      #(HIGH_PERIOD_SCL/2);
+	  assert(SCL === 1'b1 && SDA === 1'b1) 
+	  	else $error("SDA i SCL muszą być 1!");
+		
+	  #(HIGH_PERIOD_SCL- START_HOLD_TIME);
       SDA_ctrl = 0;
-      #(HIGH_PERIOD_SCL/2);
+	  #(START_HOLD_TIME);
     end
   endtask
   
@@ -88,9 +98,9 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
       SCL_ctrl = 0;
       #DATA_SETUP_TIME SDA_ctrl = 0;
       #(LOW_PERIOD_SCL - DATA_SETUP_TIME) SCL_ctrl = 1;
-      #(HIGH_PERIOD_SCL/2) SDA_ctrl = 1;
-      #(HIGH_PERIOD_SCL/2);
-
+	  #(STOP_SETUP_TIME) SDA_ctrl = 1;
+	  #(BUFF_TIME);
+		
       // dodane
       phase = M_DONE;
       // koniec dodanego
@@ -100,14 +110,14 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
   task sendBit (input bit data);
     begin
       SCL_ctrl = 0;
-      #DATA_SETUP_TIME SDA_ctrl = data;
-      #(LOW_PERIOD_SCL - DATA_SETUP_TIME) SCL_ctrl = 1;
+      #DATA_HOLD_TIME SDA_ctrl = data;
+      #(DATA_SETUP_TIME) SCL_ctrl = 1;
       wait(SCL === 1'b1); //SCL stretch
       #HIGH_PERIOD_SCL;
     end
   endtask
   
-  task sendData (input reg [7:0] data);
+  task sendData (input bit [7:0] data);
     begin
         // dodane
         phase = M_DATA_TX;
@@ -128,7 +138,7 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
     end
   endtask
   
-  task sendAddressRW(input reg [6:0] addr, input bit rw);
+  task sendAddressRW(input bit [6:0] addr, input bit rw);
     begin
       // dodane
       phase    = M_ADDR;
@@ -174,11 +184,11 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
        SCL_ctrl = 0;
        #LOW_PERIOD_SCL SCL_ctrl = 1;
        wait(SCL === 1'b1); //SCL stretch
-       #(HIGH_PERIOD_SCL/2) begin
+	   #1 begin
          ack_got  = ~SDA;     // sda 0 -> ack 1 ------ sda 1 -> nack 0
          last_ack = ack_got;  
        end
-       #(HIGH_PERIOD_SCL/2);
+	   #(HIGH_PERIOD_SCL - 1);
 
        // jesli nack to eror ---- sprawdzic czy sie nie wysra w burstcie
        if (!last_ack) phase = M_ERROR;
@@ -190,8 +200,8 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
     begin
        SCL_ctrl = 0;
        #LOW_PERIOD_SCL SCL_ctrl = 1;
-       #(HIGH_PERIOD_SCL/2) data = SDA;
-       #(HIGH_PERIOD_SCL/2); 	
+       #1 data = SDA;
+	   #(HIGH_PERIOD_SCL - 1); 	
     end
   endtask    
 
@@ -216,7 +226,7 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
     end
   endtask
       
-  task writeTransaction(input reg [6:0] addr, input reg [7:0] data); 
+  task writeTransaction(input bit [6:0] addr, input bit [7:0] data); 
     begin
       // dodane
       phase    = M_IDLE;
@@ -244,7 +254,7 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
     end
   endtask
   
-  task writeTransactionReg(input reg [6:0] addr, input reg [7:0] register, input reg [7:0] data); 
+  task writeTransactionReg(input bit [6:0] addr, input bit [7:0] bitister, input bit [7:0] data); 
     begin
       // dodane
       phase    = M_IDLE;
@@ -260,7 +270,7 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
       // koniec dodanego
 
       if(ack_got) begin
-        sendData(register);
+        sendData(bitister);
 
         // (opcjonalnie) jeśli sprwadzamy ACK po danych
         // dodane
@@ -284,7 +294,7 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
     end
   endtask
   
-  task readTransaction(input reg [6:0] addr); 
+  task readTransaction(input bit [6:0] addr); 
     begin
       // dodane
       phase    = M_IDLE;
@@ -314,7 +324,7 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
     end
   endtask
 
-  task burstRead(input reg [6:0] addr, input int numBytes); 
+  task burstRead(input bit [6:0] addr, input real time numBytes); 
     begin
       // dodane
       byte_idx = -1;
@@ -358,7 +368,7 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
     end
   endtask
 
-  task burstWrite(input reg [6:0] addr, input int numBytes, input reg [MAX_BYTES-1:0][6:0] data);
+  task burstWrite(input bit [6:0] addr, input real time numBytes, input bit [MAX_BYTES-1:0][6:0] data);
     begin
       // dodane
       byte_idx = -1;
@@ -389,7 +399,7 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
     end
   endtask
   
-  task writeRandomStop(input reg [6:0] addr, input reg [7:0] data, int randbit); 
+  task writeRandomStop(input bit [6:0] addr, input bit [7:0] data, real time randbit); 
     begin
       // dodane
       phase    = M_IDLE;
@@ -452,7 +462,7 @@ parameter STRETCH = 0;//1000 0 tez dziala            //Number of clock cycles fo
 
 //Input Deceleration
 input logic rst;                                     //Active high logic
-input logic clk;                                        //target's internal clock (50MHz)
+input logic clk;                                        //target's real timeernal clock (50MHz)
 input logic [BITS_SEND-1:0] data_send;                  //Data to be sent to the controller (R/W='0')
 
 //Output deleration
@@ -462,7 +472,7 @@ output logic [BITS_RECEIVE-1:0] data_received;          //Data received from the
 inout SDA_bidir;                                        //Serial data
 inout SCL_bidir;                                        //Serial clock
 
-//Internal logic signals decelerations
+//real timeernal logic signals decelerations
 logic SCL_tx;                                           //Tri-state logic - SCL output signal
 logic SCL_rx;                                           //Tri-state logic - SCL input signal
 logic SDA_tx;                                           //Tri-state logic - SDA output signal
@@ -490,8 +500,8 @@ logic [BYTES_RECEIVE-1:0] count_bytes_received;         //Counts the number of r
 logic rw;                                               //The LSB of the address frame ('0' for TX and '1' for RX)
 logic ack;                                              //Acknoledgement bit
 
-logic [7:0] reg_mem [0:3]; // 4 registers: 0x00, 0x01, 0x02, 0x03
-logic [7:0] reg_ptr;
+logic [7:0] bit_mem [0:3]; // 4 bitisters: 0x00, 0x01, 0x02, 0x03
+logic [7:0] bit_ptr;
 logic [7:0] temp_byte;  
 //HDL code  
 //Bus state detection logic (i.e. free/busy)
@@ -569,11 +579,11 @@ always @(posedge clk or negedge rst)
 	 data_received<='0;
     SCL_tx<=1'b1;
     SDA_tx<=1'b1;
-    reg_mem[0] <= 8'hAA; // Default value for Reg 0
-    reg_mem[1] <= 8'hBB; // Default value for Reg 1
-    reg_mem[2] <= 8'hCC; // Default value for Reg 2
-    reg_mem[3] <= 8'hDD; // Default value for Reg 3
-    reg_ptr    <= 8'h00;
+    bit_mem[0] <= 8'hAA; // Default value for bit 0
+    bit_mem[1] <= 8'hBB; // Default value for bit 1
+    bit_mem[2] <= 8'hCC; // Default value for bit 2
+    bit_mem[3] <= 8'hDD; // Default value for bit 3
+    bit_ptr    <= 8'h00;
   end
 
   //Idle state
@@ -590,7 +600,7 @@ always @(posedge clk or negedge rst)
     SCL_tx<=1'b1;
     SDA_tx<=1'b1;
   end
-  else begin                                      //Do no interfere with the termination sequence carried by the controller
+  else begin                                      //Do no real timeerfere with the termination sequence carried by the controller
     SDA_tx<=1'b1;	
     SCL_tx<=1'b1;
   end
@@ -601,7 +611,7 @@ always @(posedge clk or negedge rst)
     count_high<='0;                               //Reset High period counter
 
   else if (state==BIT_CYCLE_HIGH_ADDR) begin
-    data_send_sampled <= reg_mem[reg_ptr[1:0]]; //Data to be sent if the controller asks for data from the target
+    data_send_sampled <= bit_mem[bit_ptr[1:0]]; //Data to be sent if the controller asks for data from the target
     count_high<=count_high+$bits(count_low)'(1);
 
   if (count_high==THIGH_SAMPLE) begin
@@ -653,17 +663,17 @@ else if (state==BIT_CYCLE_HIGH_DATA) begin
         
         data_received <= temp_byte; // Update the output buffer
 
-        // Logic to distinguish Pointer vs Data
+        // Logic to distinguish Poreal timeer vs Data
         if (count_bytes_received == 0) begin
-            // 1st Byte received: This is the Register Address (Pointer)
-            reg_ptr <= temp_byte; 
+            // 1st Byte received: This is the bitister Address (Poreal timeer)
+            bit_ptr <= temp_byte; 
         end
         else begin
-            // 2nd+ Byte received: Write data to the register at reg_ptr
-            reg_mem[reg_ptr[1:0]] <= temp_byte;
+            // 2nd+ Byte received: Write data to the bitister at bit_ptr
+            bit_mem[bit_ptr[1:0]] <= temp_byte;
             
-            // Optional: Auto-increment pointer if you want support for that
-            // reg_ptr <= reg_ptr + 1; 
+            // Optional: Auto-increment poreal timeer if you want support for that
+            // bit_ptr <= bit_ptr + 1; 
         end
         // -----------------------------------------------------------
 
