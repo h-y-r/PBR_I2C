@@ -1,25 +1,26 @@
 `timescale 1ns/10ps
+import transaction_class::*;
 
-// class I2C_Config;
-//   rand realtime high_period;
-//   rand realtime low_period;
-//   rand realtime setup_time;
-//   rand realtime start_setup_time;
-//   rand realtime start_hold_time;
-//   rand realtime stop_setup_time;
-//   rand realtime rand_bit;
+ class I2C_Config;
+   rand realtime high_period;
+   rand realtime low_period;
+   rand realtime setup_time;
+   rand realtime start_setup_time;
+   rand realtime start_hold_time;
+   rand realtime stop_setup_time;
+   rand realtime rand_bit;
 
-//   constraint i2c_time_const {
-//     // Min High: 4000ns, Min Low: 4700ns, Min Setup Time: 250ns 
-//     high_period inside {[4000:7000]}; 
-//     low_period  inside {[4700:7000]};
-//     setup_time  inside {[250:4700]};
-//	   start_setup_time  inside {[4700:7000]};
-//     start_hold_time  inside {[4000:7000]};
-//	   stop_setup_time  inside {[4000:7000]};
-//	   rand_bit    inside {[0:7]};
-//   }
-// endclass
+   constraint i2c_time_const {
+     //Min High: 4000ns, Min Low: 4700ns, Min Setup Time: 250ns 
+     high_period inside {[4000:7000]}; 
+     low_period  inside {[4700:7000]};
+     setup_time  inside {[250:4700]};
+     start_setup_time  inside {[4700:7000]};
+     start_hold_time  inside {[4000:7000]};
+     stop_setup_time  inside {[4000:7000]};
+     rand_bit    inside {[0:7]};
+   }
+ endclass
 
 
 //wszystkie funkcje koncza tick przed negedge SCL
@@ -59,20 +60,6 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
   } master_phase_e;
 
   master_phase_e phase = M_IDLE;
-
-    class Transaction;
-    bit [6:0] address;
-    bit rw;
-    int readlen;
-    bit [7:0]data[$];
-
-    function new(bit [6:0] addr, bit rwSet, int r_len = 0, bit [7:0] data_to_send [$] = {});
-      address = addr;
-      rw = rwSet;
-      data = data_to_send;
-      readlen = r_len;
-    endfunction : new
-  endclass
 
   typedef mailbox #(Transaction) tr_mbx;
 
@@ -199,26 +186,6 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
     end
   endtask
   
-  // dodane ???? ack po danych i po adresie
-  // task getACK(input bit is_addr_ack = 1'b0);
-  //   begin
-  //      phase   = is_addr_ack ? M_ACK_ADDR : M_ACK_DATA;
-  //      bit_idx = BIT_ACK;
-
-  //      SCL_ctrl = 0;
-  //      #LOW_PERIOD_SCL SCL_ctrl = 1;
-  //      wait(SCL === 1'b1); //SCL stretch
-	 //   #1 begin
-  //        ack_got  = ~SDA;     // sda 0 -> ack 1 ------ sda 1 -> nack 0
-  //        last_ack = ack_got;  
-  //      end
-	 //   #(HIGH_PERIOD_SCL - 1);
-
-  //      // jesli nack to eror ---- sprawdzic czy sie nie wysra w burstcie
-  //      if (!last_ack) phase = M_ERROR;
-  //   end
-  // endtask
-  // koniec dodanego
 task getACK(input bit is_addr_ack = 1'b0);
     begin
        phase   = is_addr_ack ? M_ACK_ADDR : M_ACK_DATA;
@@ -380,6 +347,7 @@ task getACK(input bit is_addr_ack = 1'b0);
   task burstRead(input bit [6:0] addr, input int numBytes); 
     begin
       // dodane
+      int k;
       byte_idx = -1;
       bit_idx  = BIT_ACK;
       // koniec dodanego
@@ -392,13 +360,13 @@ task getACK(input bit is_addr_ack = 1'b0);
       // koniec dodanego
 
       if(ack_got) begin
-        for (i = numBytes; i > 0; i--) begin
+        for (k = numBytes; k > 0; k--) begin
           // dodane
-          byte_idx = (numBytes - i);
+          byte_idx = (numBytes - k);
           // koniec dodanego
 
           readData();
-          if(i>1) begin
+          if(k>1) begin
             // ACK po bajcie read (master potwierdza że chce kolejny)
             // dodane
             phase   = M_ACK_DATA;
@@ -487,12 +455,12 @@ task transactionDriver();
   begin
     Transaction tr;
     forever begin
-      tr_mailbox.get(tr); // Wait for new transaction
+      tr_mailbox.get(tr);
 
       if(tr.rw == 0) begin // Write
         if (tr.data.size() == 1) begin
           writeTransaction(tr.address, tr.data.pop_front());
-        end else if (tr.data.size() > 1) begin // Fixed logical comparison
+        end else if (tr.data.size() > 1) begin
           burstWrite(tr.address, tr.data);
         end
       end else begin // Read
