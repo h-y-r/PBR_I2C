@@ -200,25 +200,54 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
   endtask
   
   // dodane ???? ack po danych i po adresie
-  task getACK(input bit is_addr_ack = 1'b0);
+  // task getACK(input bit is_addr_ack = 1'b0);
+  //   begin
+  //      phase   = is_addr_ack ? M_ACK_ADDR : M_ACK_DATA;
+  //      bit_idx = BIT_ACK;
+
+  //      SCL_ctrl = 0;
+  //      #LOW_PERIOD_SCL SCL_ctrl = 1;
+  //      wait(SCL === 1'b1); //SCL stretch
+	 //   #1 begin
+  //        ack_got  = ~SDA;     // sda 0 -> ack 1 ------ sda 1 -> nack 0
+  //        last_ack = ack_got;  
+  //      end
+	 //   #(HIGH_PERIOD_SCL - 1);
+
+  //      // jesli nack to eror ---- sprawdzic czy sie nie wysra w burstcie
+  //      if (!last_ack) phase = M_ERROR;
+  //   end
+  // endtask
+  // koniec dodanego
+task getACK(input bit is_addr_ack = 1'b0);
     begin
        phase   = is_addr_ack ? M_ACK_ADDR : M_ACK_DATA;
        bit_idx = BIT_ACK;
 
        SCL_ctrl = 0;
        #LOW_PERIOD_SCL SCL_ctrl = 1;
-       wait(SCL === 1'b1); //SCL stretch
-	   #1 begin
-         ack_got  = ~SDA;     // sda 0 -> ack 1 ------ sda 1 -> nack 0
-         last_ack = ack_got;  
-       end
-	   #(HIGH_PERIOD_SCL - 1);
+       wait(SCL === 1'b1); // SCL stretch
+       #1; 
 
-       // jesli nack to eror ---- sprawdzic czy sie nie wysra w burstcie
+       if (SDA === 1'b0) begin
+           // 0 -> ACK
+           ack_got = 1'b1; 
+       end 
+       else if (SDA === 1'bz || SDA === 1'b1) begin
+           //Z lub 1 -> NACK
+           ack_got = 1'b0; 
+       end 
+       else begin
+           //X -> błąd/NACK
+           ack_got = 1'b0;
+           $warning("[I2C DRIVER] SDA is X during ACK phase at time %t", $time);
+       end
+
+       last_ack = ack_got;  
+       #(HIGH_PERIOD_SCL - 1);
        if (!last_ack) phase = M_ERROR;
     end
   endtask
-  // koniec dodanego
   
   task readBit(output bit data);
     begin
