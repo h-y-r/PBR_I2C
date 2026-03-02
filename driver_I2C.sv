@@ -57,6 +57,7 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
     M_STOP,      // generowanie STOP
     M_DONE,      // wszystko OK
     M_ERROR      // blad nack po adresie czy cos
+	M_ADDR_10BIT
   } master_phase_e;
 
   master_phase_e phase = M_IDLE;
@@ -453,7 +454,36 @@ task getACK(input bit is_addr_ack = 1'b0);
       sendStop();
     end
   endtask
+	
+task sendAdress10Bit(input bit [9:0] addr, input bit rw);
+	bit [4:0] code = 5'b11110;
+	phase = M_ADDR_10BIT;
+	byte_idx = -1;
+	sendStart();
+	
+	for (i = 4; i >= 0; i--) begin
+          bit_idx  = i;
+		  sendBit(code[i]);
+	end
+	
+	sendBit(addr[9]);
+	sendBit(addr[8]);
+	sendBit(rw);
+	
+	bit_idx = BIT_RW;
+	SDA_ctrl = 1;
+    getACK(1'b1);  
+       
+	for (i = 7; i >= 0; i--) begin
+        bit_idx = i;
+        sendBit(addr[i]);
+    end
 
+	bit_idx = BIT_RW;
+	SDA_ctrl = 1;
+    getACK(1'b1); 		
+endtask
+			
 task transactionDriver();
   begin
     Transaction tr;
