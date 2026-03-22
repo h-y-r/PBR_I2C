@@ -110,20 +110,24 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
   
   task sendStop();
     begin
-      // dodane
-      phase   = M_STOP;
-      bit_idx = BIT_ACK;
-      // koniec dodanego
+      if (tr_mailbox.num !=0) begin
+        sendRepeatedStart();
+      end else begin
+        // dodane
+        phase   = M_STOP;
+        bit_idx = BIT_ACK;
+        // koniec dodanego
 
-      SCL_ctrl = 0;
-      #DATA_SETUP_TIME SDA_ctrl = 0;
-      #(LOW_PERIOD_SCL - DATA_SETUP_TIME) SCL_ctrl = 1;
-	  #(STOP_SETUP_TIME) SDA_ctrl = 1;
-	  #(BUFF_TIME);
-		
-      // dodane
-      phase = M_DONE;
-      // koniec dodanego
+        SCL_ctrl = 0;
+        #DATA_SETUP_TIME SDA_ctrl = 0;
+        #(LOW_PERIOD_SCL - DATA_SETUP_TIME) SCL_ctrl = 1;
+  	  #(STOP_SETUP_TIME) SDA_ctrl = 1;
+  	  #(BUFF_TIME);
+  		
+        // dodane
+        phase = M_DONE;
+        // koniec dodanego
+      end
     end
   endtask
 

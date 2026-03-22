@@ -6,6 +6,9 @@
 module tst_combinedFormatForMemoryAddressing_read;
 
 // Deklaracje zmiennych
+bit REPEATED_START;
+
+event assert_chk_repeatedStartToKeepBusBusy;
 
 initial begin
 	Transaction tr_addr;
@@ -39,10 +42,19 @@ initial begin
 	
 	`MAIL.put(tr_addr);
 	`MAIL.put(tr_read);
+
+	wait (`DRIVER.phase == M_SR);
+	wait (`DRIVER.phase = M_DATA_TX);
+	REPEATED_START = `DRIVER.last_ack;
+	-> assert_chk_repeatedStartToKeepBusBusy;
 	
 	#25us;
 	$finish();
 end
 
+always @(assert_chk_repeatedStartToKeepBusBusy) begin
+	chk_repeatedStartToKeepBusBusy : assert(REPEATED_START) $display("chk_repeatedStartToKeepBusBusy PASSED");
+									 else $error("chk_repeatedStartToKeepBusBusy FAILED");
+end
 
 endmodule

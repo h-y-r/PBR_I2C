@@ -7,13 +7,16 @@ module tst_readTransaction;
 
 // Deklaracje zmiennych
 bit DATA_STABLE = 1;
+bit NO_STOP = 1;
 bit RW_BIT;
 
 bit prev_sda;
 realtime DATA_UNSTABLE_time;
+realtime STOP_time;
 
 event assert_chk_dataStableWhenSCLHigh;
 event assert_chk_RWBitRead;
+event assert_chk_targetDoesNotGenerateStop;
 
 
 initial begin
@@ -47,21 +50,30 @@ initial begin
 	-> assert_chk_RWBitRead;
 	wait (`DRIVER.phase == M_DONE);
 	-> assert_chk_dataStableWhenSCLHigh;
+	-> assert_chk_targetDoesNotGenerateStop;
 	$finish();
 end
 
 always @(posedge testbench.clk) begin
-	if(testbench.SCL == 1 && DATA_STABLE && testbench.SDA != prev_sda) begin
+	if(testbench.SCL == 1 && DATA_STABLE && testbench.SDA != prev_sda && (`DRIVER.phase != M_STOP || `DRIVER.phase != M_START)) begin
 		DATA_UNSTABLE_time = $realtime();
 		DATA_STABLE = 0;
-	end else begin
-		prev_sda = testbench.SDA;
 	end
+	if(prev_sda == 0 && testbench.SDA != prev_sda && `DRIVER.phase != M_STOP && NO_STOP) begin
+		STOP_time = $realtime();
+		NO_STOP = 0;
+	end 
+	prev_sda = testbench.SDA;
 end
 
 always @(assert_chk_dataStableWhenSCLHigh) begin
 	chk_dataStableWhenSCLHigh : assert(DATA_STABLE) $display("chk_dataStableWhenSCLHigh PASSED");
 								else $error("chk_dataStableWhenSCLHigh FAILED at time %0t", DATA_UNSTABLE_time);
+end
+
+always @(assert_chk_targetDoesNotGenerateStop) begin
+	chk_targetDoesNotGenerateStop : assert(NO_STOP) $display("chk_targetDoesNotGenerateStop PASSED");
+									else $error("chk_targetDoesNotGenerateStop FAILED at time %0t", STOP_time);
 end
 
 always @(assert_chk_RWBitRead) begin

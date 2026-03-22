@@ -15,6 +15,7 @@ event assert_chk_addressExists;
 event assert_chk_RWBitWrite;
 
 
+
 initial begin
 	Transaction tr;
 
@@ -68,7 +69,7 @@ end
 
 always @(assert_chk_RWBitWrite) begin
 	chk_RWBitWrite : assert(RW_BIT) $display("chk_RWBitWrite PASSED");
-					else $error("chk_RWBitWrite FAILED");
+					 else $error("chk_RWBitWrite FAILED");
 end
 
 endmodule
