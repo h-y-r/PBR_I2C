@@ -14,12 +14,12 @@ module testbench;
   always #10 clk = ~clk;
   
   target_I2C tg_i2c(
-    .rst(rst),
-    .clk(clk),
-    .data_send(16'hDEAD), 
-    .SDA_bidir(SDA),      
-    .SCL_bidir(SCL),    
-    .data_received()
+    //.rst(rst),
+    //.clk(clk),
+    //.data_send(16'hDEAD), 
+    .sda(SDA),      
+    .scl(SCL),    
+    //.data_received()
   );
   
   driver_I2C dv_i2c(
