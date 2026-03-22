@@ -87,6 +87,7 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
   int bit_idx  = BIT_ACK;  // poza danymi
   int byte_idx = -1;       // poza burstem
   bit last_ack = 1'b0;     // 1 ack 0 nack
+  bit [6:0] curr_addr;	
   
   // koniec dodanego
 
@@ -177,6 +178,7 @@ module driver_I2C(input logic clk, inout SDA, inout SCL);
       // dodane
       phase    = M_ADDR;
       byte_idx = -1;
+	  curr_addr = addr;
       // koniec dodanego
 
       for (i = 6; i >= 0; i--) begin
