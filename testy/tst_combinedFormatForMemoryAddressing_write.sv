@@ -26,13 +26,13 @@ initial begin
 	DRIVER.DATA_HOLD_TIME = DRIVER.LOW_PERIOD_SCL - DRIVER.DATA_SETUP_TIME;	
 	#100ns;
 	tr_addr = new(
-        .address(7'b0000111), 
+        .address(7'b0010000), 
         .rw(0), 
         .data({8'b00000001}) //zmienic jak bedzie target z pamiecia
     );
 
     tr_write = new(
-    	.address(7'b0000111),
+    	.address(7'b0010000),
     	.rw(0),
     	.data({8'b11001010})
     );

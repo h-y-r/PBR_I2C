@@ -33,14 +33,14 @@ initial begin
 	#100ns;
 	
 	tr = new(
-        .address(7'b0000111), 
+        .address(7'b0010000), 
         .rw(1), 
         .r_len(2)
     );
 	
 	`MAIL.put(tr);
 	
-	#25us;
+	wait (`DRIVER.phase == M_DONE);
 	-> assert_chk_dataStableWhenSCLHigh;
 	$finish();
 end

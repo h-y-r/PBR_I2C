@@ -62,7 +62,7 @@ initial begin
     #100ns;
 
     tr = new(
-        .address(7'b0000111),
+        .address(7'b0010000),
         .rw(0),
         .data({8'b10101010, 8'b11100011})
     );
