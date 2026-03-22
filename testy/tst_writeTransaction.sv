@@ -53,6 +53,12 @@ initial begin
 	ACK_AFTER_ADDR = `DRIVER.last_ack;
 	-> assert_chk_addressExists;
 
+    wait (`TARGET.state == 5);
+	stretch_time1 = $realtime();
+	@(posedge scl) stretch_time2 = $realtime();
+	CLOCK_STRETCH = ((`TARGET.state = 5) && (stretch_time2 - stretch_time1) <= `TARGET.STRETCH);
+	-> assert_chk_clockStretch;
+	
 	wait (`DRIVER.phase == M_ACK_DATA);
 	wait (`DRIVER.phase == M_DATA_TX);
 	ACK_AFTER_BYTE = `DRIVER.last_ack;
@@ -76,6 +82,11 @@ always @(assert_chk_RWBitWrite) begin
 	chk_RWBitWrite : assert(RW_BIT) $display("chk_RWBitWrite PASSED");
 					 else $error("chk_RWBitWrite FAILED");
 end
+
+always @(assert_chk_clockStretch) begin					
+	chk_clockStretch : assert(CLOCK_STRETCH) $display("chk_clockStretch PASSED!");
+		else $error("chk_clockStretch FAILED!");
+end	
 
 chk_ackAfterData: assert property (ACK_AFTER_DATA) $display("chk_ackAfterData PASSED!");
 				  else $error("chk_ackAfterData FAILED!");
